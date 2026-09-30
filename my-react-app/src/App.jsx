@@ -1,23 +1,22 @@
-
 import { useState } from "react";
 import "./App.css";
 
 function App() {
-  // Form state
   const [isLogin, setIsLogin] = useState(true);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Handle login and registration
   async function handleSubmit(e) {
     e.preventDefault();
     setMessage("");
 
-    // Validate registration fields
+    // Registration validation
     if (!isLogin && !name.trim()) {
       setMessage("Please enter your name.");
       return;
@@ -46,12 +45,10 @@ function App() {
     setIsLoading(true);
 
     try {
-      // Select the backend API
       const endpoint = isLogin
         ? "http://localhost:5000/api/login"
         : "http://localhost:5000/api/register";
 
-      // Prepare the data
       const userData = isLogin
         ? {
             email: email.trim(),
@@ -63,7 +60,6 @@ function App() {
             password: password,
           };
 
-      // Send data to the backend
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -72,7 +68,6 @@ function App() {
         body: JSON.stringify(userData),
       });
 
-      // Read the backend response
       const data = await response.json();
 
       if (!response.ok) {
@@ -80,17 +75,16 @@ function App() {
         return;
       }
 
-      // Display success message
-      setMessage(data.message);
-
+      // LOGIN SUCCESS
       if (isLogin) {
-        // Login successful
-        console.log("Logged in user:", data.user);
-
-        // Clear password fields
+        setMessage("Login successful!");
         setPassword("");
-      } else {
-        // Registration successful
+      }
+
+      // REGISTRATION SUCCESS
+      else {
+        setMessage("Registration successful!");
+
         setName("");
         setEmail("");
         setPassword("");
@@ -98,6 +92,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error:", error);
+
       setMessage(
         "Cannot connect to the server. Please check your backend."
       );
@@ -106,9 +101,9 @@ function App() {
     }
   }
 
-  // Switch between Login and Register
   function switchForm() {
     setIsLogin((previous) => !previous);
+
     setName("");
     setEmail("");
     setPassword("");
@@ -116,9 +111,9 @@ function App() {
     setMessage("");
   }
 
-  // Forgot password message
   function handleForgotPassword(e) {
     e.preventDefault();
+
     setMessage(
       "Password reset is not configured yet. Please contact support."
     );
@@ -128,71 +123,81 @@ function App() {
     <main className="login-page">
       <div className="login-card">
 
-        {/* Left side image */}
+        {/* LEFT IMAGE */}
         <div className="login-image">
           <img
             src="/react.jpg"
-            alt="React abstract background"
+            alt="React background"
           />
         </div>
 
-        {/* Right side form */}
+        {/* RIGHT CONTENT */}
         <div className="login-content">
           <div className="login-form-container">
 
-            {/* Heading */}
-            <h1 className="logo">Welcome</h1>
+            {/* WELCOME */}
+            <h1 className="logo">
+              Welcome
+            </h1>
 
+            {/* TITLE */}
             <h2>
               {isLogin
                 ? "Sign into your account"
                 : "Create your account"}
             </h2>
 
-            {/* Login and Register form */}
             <form onSubmit={handleSubmit}>
 
-              {/* Name field - Register only */}
+              {/* NAME - REGISTER */}
               {!isLogin && (
                 <div className="input-group">
                   <input
                     type="text"
                     placeholder="Full name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) =>
+                      setName(e.target.value)
+                    }
                     autoComplete="name"
                     required
                   />
                 </div>
               )}
 
-              {/* Email field */}
+              {/* EMAIL */}
               <div className="input-group">
                 <input
                   type="email"
                   placeholder="Email-address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) =>
+                    setEmail(e.target.value)
+                  }
                   autoComplete="email"
                   required
                 />
               </div>
 
-              {/* Password field */}
+              {/* PASSWORD */}
               <div className="input-group">
                 <input
                   type="password"
                   placeholder="Password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
                   autoComplete={
-                    isLogin ? "current-password" : "new-password"
+                    isLogin
+                      ? "current-password"
+                      : "new-password"
                   }
                   required
                 />
               </div>
 
-              {/* Confirm password - Register only */}
+              {/* CONFIRM PASSWORD - REGISTER */}
               {!isLogin && (
                 <div className="input-group">
                   <input
@@ -208,7 +213,7 @@ function App() {
                 </div>
               )}
 
-              {/* Forgot password - Login only */}
+              {/* FORGOT PASSWORD */}
               {isLogin && (
                 <div className="forgot-password">
                   <a
@@ -220,7 +225,7 @@ function App() {
                 </div>
               )}
 
-              {/* Success or error message */}
+              {/* MESSAGE */}
               {message && (
                 <p
                   className="message"
@@ -231,7 +236,7 @@ function App() {
                 </p>
               )}
 
-              {/* Submit button */}
+              {/* BUTTON */}
               <button
                 type="submit"
                 className="login-button"
@@ -240,12 +245,13 @@ function App() {
                 {isLoading
                   ? "Please wait..."
                   : isLogin
-                    ? "Login"
-                    : "Register"}
+                  ? "Login"
+                  : "Register"}
               </button>
+
             </form>
 
-            {/* Switch between forms */}
+            {/* SWITCH LOGIN / REGISTER */}
             <p className="register-text">
               {isLogin
                 ? "Don't have an account? "
@@ -256,12 +262,15 @@ function App() {
                 className="register-link"
                 onClick={switchForm}
               >
-                {isLogin ? "Register here" : "Login here"}
+                {isLogin
+                  ? "Register here"
+                  : "Login here"}
               </button>
             </p>
 
           </div>
         </div>
+
       </div>
     </main>
   );
