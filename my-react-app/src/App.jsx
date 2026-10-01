@@ -1,24 +1,31 @@
+
 import { useState } from "react";
 import "./App.css";
 
 function App() {
   const [isLogin, setIsLogin] = useState(true);
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  function switchForm() {
+    setIsLogin((previous) => !previous);
+    setName("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setMessage("");
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMessage("");
 
-    // Registration validation
     if (!isLogin && !name.trim()) {
-      setMessage("Please enter your name.");
+      setMessage("Please enter your full name.");
       return;
     }
 
@@ -46,18 +53,18 @@ function App() {
 
     try {
       const endpoint = isLogin
-        ? "http://localhost:5000/api/login"
-        : "http://localhost:5000/api/register";
+        ? "/api/login"
+        : "/api/register";
 
       const userData = isLogin
         ? {
             email: email.trim(),
-            password: password,
+            password,
           }
         : {
             name: name.trim(),
             email: email.trim(),
-            password: password,
+            password,
           };
 
       const response = await fetch(endpoint, {
@@ -75,24 +82,19 @@ function App() {
         return;
       }
 
-      // LOGIN SUCCESS
       if (isLogin) {
-        setMessage("Login successful!");
+        setMessage(data.message || "Login successful!");
+        console.log("Logged in user:", data.user);
         setPassword("");
-      }
-
-      // REGISTRATION SUCCESS
-      else {
+      } else {
         setMessage("Registration successful!");
-
         setName("");
         setEmail("");
         setPassword("");
         setConfirmPassword("");
       }
     } catch (error) {
-      console.error("Error:", error);
-
+      console.error("API error:", error);
       setMessage(
         "Cannot connect to the server. Please check your backend."
       );
@@ -101,103 +103,76 @@ function App() {
     }
   }
 
-  function switchForm() {
-    setIsLogin((previous) => !previous);
-
-    setName("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setMessage("");
-  }
-
   function handleForgotPassword(e) {
     e.preventDefault();
-
     setMessage(
       "Password reset is not configured yet. Please contact support."
     );
   }
 
   return (
-    <main className="login-page">
-      <div className="login-card">
-
-        {/* LEFT IMAGE */}
-        <div className="login-image">
+    <main className="app-container">
+      <div className="auth-card">
+        {/* Left image section */}
+        <div className="image-section">
           <img
             src="/react.jpg"
-            alt="React background"
+            alt="Abstract background"
+            className="login-image"
           />
         </div>
 
-        {/* RIGHT CONTENT */}
-        <div className="login-content">
-          <div className="login-form-container">
-
-            {/* WELCOME */}
-            <h1 className="logo">
-              Welcome
-            </h1>
-
-            {/* TITLE */}
-            <h2>
-              {isLogin
-                ? "Sign into your account"
-                : "Create your account"}
-            </h2>
+        {/* Right login and registration section */}
+        <div className="form-section">
+          <div className="form-content">
+            {/* Both headings are centered here */}
+            <div className="form-heading">
+              <h1>Welcome</h1>
+              <h2>
+                {isLogin
+                  ? "Sign into your account"
+                  : "Create your account"}
+              </h2>
+            </div>
 
             <form onSubmit={handleSubmit}>
-
-              {/* NAME - REGISTER */}
               {!isLogin && (
                 <div className="input-group">
                   <input
                     type="text"
                     placeholder="Full name"
                     value={name}
-                    onChange={(e) =>
-                      setName(e.target.value)
-                    }
+                    onChange={(e) => setName(e.target.value)}
                     autoComplete="name"
                     required
                   />
                 </div>
               )}
 
-              {/* EMAIL */}
               <div className="input-group">
                 <input
                   type="email"
                   placeholder="Email-address"
                   value={email}
-                  onChange={(e) =>
-                    setEmail(e.target.value)
-                  }
+                  onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   required
                 />
               </div>
 
-              {/* PASSWORD */}
               <div className="input-group">
                 <input
                   type="password"
                   placeholder="Password"
                   value={password}
-                  onChange={(e) =>
-                    setPassword(e.target.value)
-                  }
+                  onChange={(e) => setPassword(e.target.value)}
                   autoComplete={
-                    isLogin
-                      ? "current-password"
-                      : "new-password"
+                    isLogin ? "current-password" : "new-password"
                   }
                   required
                 />
               </div>
 
-              {/* CONFIRM PASSWORD - REGISTER */}
               {!isLogin && (
                 <div className="input-group">
                   <input
@@ -213,7 +188,6 @@ function App() {
                 </div>
               )}
 
-              {/* FORGOT PASSWORD */}
               {isLogin && (
                 <div className="forgot-password">
                   <a
@@ -225,10 +199,13 @@ function App() {
                 </div>
               )}
 
-              {/* MESSAGE */}
               {message && (
                 <p
-                  className="message"
+                  className={
+                    message.toLowerCase().includes("successful")
+                      ? "message success-message"
+                      : "message error-message"
+                  }
                   role="status"
                   aria-live="polite"
                 >
@@ -236,10 +213,9 @@ function App() {
                 </p>
               )}
 
-              {/* BUTTON */}
               <button
                 type="submit"
-                className="login-button"
+                className="submit-button"
                 disabled={isLoading}
               >
                 {isLoading
@@ -248,29 +224,23 @@ function App() {
                   ? "Login"
                   : "Register"}
               </button>
-
             </form>
 
-            {/* SWITCH LOGIN / REGISTER */}
-            <p className="register-text">
+            <p className="form-footer">
               {isLogin
                 ? "Don't have an account? "
                 : "Already have an account? "}
 
               <button
                 type="button"
-                className="register-link"
+                className="switch-link"
                 onClick={switchForm}
               >
-                {isLogin
-                  ? "Register here"
-                  : "Login here"}
+                {isLogin ? "Register here" : "Login here"}
               </button>
             </p>
-
           </div>
         </div>
-
       </div>
     </main>
   );
