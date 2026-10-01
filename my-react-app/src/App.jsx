@@ -2,6 +2,8 @@
 import { useState } from "react";
 import "./App.css";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 function App() {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -39,16 +41,25 @@ function App() {
       }
     }
 
+    if (!API_URL) {
+      setMessage(
+        "Server URL is not configured. Please check VITE_API_URL."
+      );
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const endpoint = isLogin ? "/api/login" : "/api/register";
+      const endpoint = isLogin
+        ? "/api/login"
+        : "/api/register";
 
       const requestBody = isLogin
         ? { email, password }
         : { name, email, password };
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -64,8 +75,8 @@ function App() {
       }
 
       if (isLogin) {
-        // Use the actual name returned by the database through the backend.
-        const databaseName = data.name || data.user?.name;
+        // Use the actual name returned by the backend/database.
+        const databaseName = data.user?.name || data.name;
 
         if (!databaseName) {
           setMessage(
@@ -85,7 +96,10 @@ function App() {
         setConfirmPassword("");
       }
     } catch (error) {
-      setMessage("Cannot connect to the server. Please check your backend.");
+      console.error("Authentication error:", error);
+      setMessage(
+        "Cannot connect to the server. Please check your backend."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +162,9 @@ function App() {
           ) : (
             <div className="form-content">
               <h1>
-                {isLogin ? "Welcome back!" : "Create your account"}
+                {isLogin
+                  ? "Welcome back!"
+                  : "Create your account"}
               </h1>
 
               <p className="form-subtitle">
@@ -182,7 +198,9 @@ function App() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={
-                    isLogin ? "current-password" : "new-password"
+                    isLogin
+                      ? "current-password"
+                      : "new-password"
                   }
                 />
 
@@ -191,7 +209,9 @@ function App() {
                     type="password"
                     placeholder="Confirm password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) =>
+                      setConfirmPassword(e.target.value)
+                    }
                     autoComplete="new-password"
                   />
                 )}
@@ -241,7 +261,9 @@ function App() {
                   className="switch-link"
                   onClick={switchMode}
                 >
-                  {isLogin ? "Register here" : "Login here"}
+                  {isLogin
+                    ? "Register here"
+                    : "Login here"}
                 </button>
               </p>
             </div>
