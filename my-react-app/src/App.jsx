@@ -4,75 +4,56 @@ import "./App.css";
 
 function App() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [loggedInName, setLoggedInName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  function switchForm() {
-    setIsLogin((previous) => !previous);
-    setName("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setMessage("");
-  }
-
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
 
-    if (!isLogin && !name.trim()) {
-      setMessage("Please enter your full name.");
+    if (!email.trim() || !password.trim()) {
+      setMessage("Please enter your email and password.");
       return;
     }
 
-    if (!email.trim()) {
-      setMessage("Please enter your email.");
-      return;
-    }
+    if (!isLogin) {
+      if (!name.trim()) {
+        setMessage("Please enter your name.");
+        return;
+      }
 
-    if (!password) {
-      setMessage("Please enter your password.");
-      return;
-    }
+      if (password.length < 6) {
+        setMessage("Password must contain at least 6 characters.");
+        return;
+      }
 
-    if (!isLogin && password.length < 6) {
-      setMessage("Password must be at least 6 characters.");
-      return;
-    }
-
-    if (!isLogin && password !== confirmPassword) {
-      setMessage("Passwords do not match.");
-      return;
+      if (password !== confirmPassword) {
+        setMessage("Passwords do not match.");
+        return;
+      }
     }
 
     setIsLoading(true);
 
     try {
-      const endpoint = isLogin
-        ? "/api/login"
-        : "/api/register";
+      const endpoint = isLogin ? "/api/login" : "/api/register";
 
-      const userData = isLogin
-        ? {
-            email: email.trim(),
-            password,
-          }
-        : {
-            name: name.trim(),
-            email: email.trim(),
-            password,
-          };
+      const requestBody = isLogin
+        ? { email, password }
+        : { name, email, password };
 
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -83,84 +64,118 @@ function App() {
       }
 
       if (isLogin) {
-        setMessage(data.message || "Login successful!");
-        console.log("Logged in user:", data.user);
-        setPassword("");
+        // Use the actual name returned by the database through the backend.
+        const databaseName = data.name || data.user?.name;
+
+        if (!databaseName) {
+          setMessage(
+            "Login succeeded, but the backend did not return your name."
+          );
+          return;
+        }
+
+        setLoggedInName(databaseName);
+        setIsLoggedIn(true);
+        setMessage("");
       } else {
-        setMessage("Registration successful!");
+        setMessage(data.message || "Registration Successful!");
         setName("");
         setEmail("");
         setPassword("");
         setConfirmPassword("");
       }
     } catch (error) {
-      console.error("API error:", error);
-      setMessage(
-        "Cannot connect to the server. Please check your backend."
-      );
+      setMessage("Cannot connect to the server. Please check your backend.");
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
-  function handleForgotPassword(e) {
-    e.preventDefault();
-    setMessage(
-      "Password reset is not configured yet. Please contact support."
-    );
-  }
+  const switchMode = () => {
+    setIsLogin((previous) => !previous);
+    setMessage("");
+    setName("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setIsLogin(true);
+    setName("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setMessage("");
+    setLoggedInName("");
+  };
+
+  const handleForgotPassword = () => {
+    setMessage("Password reset is not available yet.");
+  };
 
   return (
-    <main className="app-container">
-      <div className="auth-card">
-        {/* Left image section */}
-        <div className="image-section">
+    <main className="page-container">
+      <section className="auth-card">
+        <div className="image-panel">
           <img
             src="/react.jpg"
-            alt="Abstract background"
-            className="login-image"
+            alt="Abstract blue and teal artwork"
+            className="side-image"
           />
         </div>
 
-        {/* Right login and registration section */}
-        <div className="form-section">
-          <div className="form-content">
-            {/* Both headings are centered here */}
-            <div className="form-heading">
-              <h1>Welcome</h1>
-              <h2>
-                {isLogin
-                  ? "Sign into your account"
-                  : "Create your account"}
-              </h2>
-            </div>
+        <div className="form-panel">
+          {isLoggedIn ? (
+            <div className="success-screen">
+              <div className="success-icon">✓</div>
 
-            <form onSubmit={handleSubmit}>
-              {!isLogin && (
-                <div className="input-group">
+              <h1>Welcome, {loggedInName}!</h1>
+
+              <p className="form-subtitle">
+                You have logged in successfully.
+              </p>
+
+              <button
+                type="button"
+                className="auth-button"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div className="form-content">
+              <h1>
+                {isLogin ? "Welcome back!" : "Create your account"}
+              </h1>
+
+              <p className="form-subtitle">
+                {isLogin
+                  ? "Sign in to continue to your account"
+                  : "Get started by creating your account"}
+              </p>
+
+              <form onSubmit={handleSubmit} className="auth-form">
+                {!isLogin && (
                   <input
                     type="text"
                     placeholder="Full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     autoComplete="name"
-                    required
                   />
-                </div>
-              )}
+                )}
 
-              <div className="input-group">
                 <input
                   type="email"
-                  placeholder="Email-address"
+                  placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
-                  required
                 />
-              </div>
 
-              <div className="input-group">
                 <input
                   type="password"
                   placeholder="Password"
@@ -169,79 +184,70 @@ function App() {
                   autoComplete={
                     isLogin ? "current-password" : "new-password"
                   }
-                  required
                 />
-              </div>
 
-              {!isLogin && (
-                <div className="input-group">
+                {!isLogin && (
                   <input
                     type="password"
                     placeholder="Confirm password"
                     value={confirmPassword}
-                    onChange={(e) =>
-                      setConfirmPassword(e.target.value)
-                    }
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     autoComplete="new-password"
-                    required
                   />
-                </div>
-              )}
+                )}
 
-              {isLogin && (
-                <div className="forgot-password">
-                  <a
-                    href="#forgot"
+                {isLogin && (
+                  <button
+                    type="button"
+                    className="forgot-link"
                     onClick={handleForgotPassword}
                   >
                     Forgot Password?
-                  </a>
-                </div>
-              )}
+                  </button>
+                )}
 
-              {message && (
-                <p
-                  className={
-                    message.toLowerCase().includes("successful")
-                      ? "message success-message"
-                      : "message error-message"
-                  }
-                  role="status"
-                  aria-live="polite"
+                {message && (
+                  <div
+                    className={`form-message ${
+                      message.toLowerCase().includes("successful")
+                        ? "success-text"
+                        : "error-text"
+                    }`}
+                    role="status"
+                  >
+                    {message}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="auth-button"
+                  disabled={isLoading}
                 >
-                  {message}
-                </p>
-              )}
+                  {isLoading
+                    ? "Please wait..."
+                    : isLogin
+                    ? "Login"
+                    : "Register"}
+                </button>
+              </form>
 
-              <button
-                type="submit"
-                className="submit-button"
-                disabled={isLoading}
-              >
-                {isLoading
-                  ? "Please wait..."
-                  : isLogin
-                  ? "Login"
-                  : "Register"}
-              </button>
-            </form>
-
-            <p className="form-footer">
-              {isLogin
-                ? "Don't have an account? "
-                : "Already have an account? "}
-
-              <button
-                type="button"
-                className="switch-link"
-                onClick={switchForm}
-              >
-                {isLogin ? "Register here" : "Login here"}
-              </button>
-            </p>
-          </div>
+              <p className="switch-text">
+                {isLogin
+                  ? "Don't have an account?"
+                  : "Already have an account?"}{" "}
+                <button
+                  type="button"
+                  className="switch-link"
+                  onClick={switchMode}
+                >
+                  {isLogin ? "Register here" : "Login here"}
+                </button>
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      </section>
     </main>
   );
 }
