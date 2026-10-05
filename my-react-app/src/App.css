@@ -171,26 +171,37 @@ input {
   overflow-wrap: anywhere;
 }
 
-/* Submit button */
+/* Submit button - black by default */
 .auth-submit-button {
   width: 100%;
   min-height: 48px;
   margin-top: 4px;
+  padding: 0 14px;
   border: none;
   border-radius: 9px;
-  background: #174c38;
+  background-color: #000000;
   color: #ffffff;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 600;
+  text-align: center;
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
+/* Teal blue only when hovering */
 .auth-submit-button:hover:not(:disabled) {
-  background: #103a2b;
+  background-color: #0d858c;
   transform: translateY(-1px);
 }
 
+/* Click effect */
+.auth-submit-button:active:not(:disabled) {
+  background-color: #08777d;
+  transform: translateY(0);
+}
+
+/* Disabled state */
 .auth-submit-button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
