@@ -4,8 +4,15 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const crypto = require("crypto");
+const { OAuth2Client } = require("google-auth-library");
 
 dotenv.config();
+
+const googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID
+);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,12 +43,46 @@ app.use(
 
       return callback(new Error("Not allowed by CORS"));
     },
+
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// =========================
+// JSON requests
+// =========================
+
 app.use(express.json({ limit: "10kb" }));
+
+// =========================
+// IMAGE UPLOAD
+// =========================
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 MB
+  },
+
+  fileFilter: (req, file, callback) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.mimetype)) {
+      return callback(
+        new Error("Only JPG, PNG and WebP images are allowed.")
+      );
+    }
+
+    callback(null, true);
+  },
+});
 
 // =========================
 // MYSQL CONNECTION
@@ -53,6 +94,7 @@ const db = mysql.createPool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: Number(process.env.DB_PORT) || 3306,
+
   waitForConnections: true,
   connectionLimit: 10,
 
@@ -405,6 +447,209 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =========================
+// GOOGLE LOGIN
+// =========================
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        message: "Google credential is required.",
+      });
+    }
+
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      console.error(
+        "GOOGLE_CLIENT_ID is not configured."
+      );
+
+      return res.status(500).json({
+        message:
+          "Google login is not configured on the server.",
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error(
+        "JWT_SECRET is not configured."
+      );
+
+      return res.status(500).json({
+        message:
+          "Server authentication is not configured.",
+      });
+    }
+
+    // Verify Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (
+      !payload ||
+      !payload.sub ||
+      !payload.email ||
+      !payload.email_verified
+    ) {
+      return res.status(401).json({
+        message:
+          "Unable to verify your Google account.",
+      });
+    }
+
+    const googleId = payload.sub;
+
+    const cleanEmail =
+      payload.email.toLowerCase();
+
+    const googleName =
+      (payload.name ||
+        cleanEmail.split("@")[0])
+        .trim()
+        .slice(0, 100);
+
+    // =========================
+    // Find user by Google ID
+    // =========================
+
+    const [googleUsers] = await db.execute(
+      `SELECT id, name, email, google_id
+       FROM users
+       WHERE google_id = ?`,
+      [googleId]
+    );
+
+    let user;
+
+    if (googleUsers.length > 0) {
+      user = googleUsers[0];
+
+      // Security check
+      if (
+        user.email.toLowerCase() !==
+        cleanEmail
+      ) {
+        return res.status(401).json({
+          message:
+            "This Google account is not linked correctly.",
+        });
+      }
+    } else {
+      // =========================
+      // Find existing account by email
+      // =========================
+
+      const [existingUsers] = await db.execute(
+        `SELECT id, name, email, google_id
+         FROM users
+         WHERE email = ?`,
+        [cleanEmail]
+      );
+
+      if (existingUsers.length > 0) {
+        user = existingUsers[0];
+
+        // If another Google account is already
+        // linked to this user, do not replace it.
+        if (
+          user.google_id &&
+          user.google_id !== googleId
+        ) {
+          return res.status(409).json({
+            message:
+              "This email is already linked to another Google account.",
+          });
+        }
+
+        // Link this Google account
+        await db.execute(
+          `UPDATE users
+           SET google_id = ?
+           WHERE id = ?`,
+          [googleId, user.id]
+        );
+
+        user.google_id = googleId;
+      } else {
+        // =========================
+        // Create new Google user
+        // =========================
+
+        // Generate a random password because
+        // the existing users table uses a password column.
+        const randomPassword =
+          crypto.randomBytes(32).toString("hex");
+
+        const hashedPassword =
+          await bcrypt.hash(
+            randomPassword,
+            10
+          );
+
+        const [result] = await db.execute(
+          `INSERT INTO users
+           (name, email, password, email_verified, google_id)
+           VALUES (?, ?, ?, TRUE, ?)`,
+          [
+            googleName,
+            cleanEmail,
+            hashedPassword,
+            googleId,
+          ]
+        );
+
+        user = {
+          id: result.insertId,
+          name: googleName,
+          email: cleanEmail,
+          google_id: googleId,
+        };
+      }
+    }
+
+    // =========================
+    // Create our own JWT
+    // =========================
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    return res.json({
+      message: "Google login successful!",
+      token,
+
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Google login error:",
+      error
+    );
+
+    return res.status(401).json({
+      message: "Google sign-in failed.",
+    });
+  }
+});
+
+// =========================
 // GET ALL TASKS
 // =========================
 
@@ -423,7 +668,11 @@ app.get(
            priority,
            status,
            created_at,
-           updated_at
+           updated_at,
+           CASE
+             WHEN image IS NULL THEN 0
+             ELSE 1
+           END AS has_image
          FROM tasks
          WHERE user_id = ?
          ORDER BY due_date ASC,
@@ -450,12 +699,87 @@ app.get(
 );
 
 // =========================
+// GET TASK IMAGE
+// =========================
+
+app.get(
+  "/api/tasks/:id/image",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const taskId = Number(
+        req.params.id
+      );
+
+      if (
+        !Number.isSafeInteger(taskId) ||
+        taskId <= 0
+      ) {
+        return res.status(400).json({
+          message: "Invalid task ID.",
+        });
+      }
+
+      const [rows] = await db.execute(
+        `SELECT image, image_type
+         FROM tasks
+         WHERE id = ?
+           AND user_id = ?`,
+        [
+          taskId,
+          req.user.id,
+        ]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "Task not found.",
+        });
+      }
+
+      const task = rows[0];
+
+      if (!task.image) {
+        return res.status(404).json({
+          message:
+            "This task has no image.",
+        });
+      }
+
+      res.setHeader(
+        "Content-Type",
+        task.image_type ||
+          "application/octet-stream"
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "private, max-age=3600"
+      );
+
+      return res.send(task.image);
+    } catch (error) {
+      console.error(
+        "Get task image error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to retrieve task image.",
+      });
+    }
+  }
+);
+
+// =========================
 // CREATE TASK
 // =========================
 
 app.post(
   "/api/tasks",
   authenticateToken,
+  upload.single("image"),
   async (req, res) => {
     try {
       const validationError =
@@ -476,6 +800,12 @@ app.post(
         status = "Pending",
       } = req.body;
 
+      const imageBuffer =
+        req.file?.buffer || null;
+
+      const imageType =
+        req.file?.mimetype || null;
+
       const [result] = await db.execute(
         `INSERT INTO tasks
          (
@@ -485,9 +815,11 @@ app.post(
            due_date,
            due_time,
            priority,
-           status
+           status,
+           image,
+           image_type
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           req.user.id,
           title.trim(),
@@ -496,6 +828,8 @@ app.post(
           due_time || null,
           priority,
           status,
+          imageBuffer,
+          imageType,
         ]
       );
 
@@ -509,7 +843,11 @@ app.post(
            priority,
            status,
            created_at,
-           updated_at
+           updated_at,
+           CASE
+             WHEN image IS NULL THEN 0
+             ELSE 1
+           END AS has_image
          FROM tasks
          WHERE id = ?
            AND user_id = ?`,
@@ -529,6 +867,32 @@ app.post(
         error
       );
 
+      if (
+        error instanceof multer.MulterError
+      ) {
+        if (
+          error.code === "LIMIT_FILE_SIZE"
+        ) {
+          return res.status(400).json({
+            message:
+              "Image must be 5 MB or smaller.",
+          });
+        }
+
+        return res.status(400).json({
+          message: error.message,
+        });
+      }
+
+      if (
+        error.message ===
+        "Only JPG, PNG and WebP images are allowed."
+      ) {
+        return res.status(400).json({
+          message: error.message,
+        });
+      }
+
       return res.status(500).json({
         message: "Unable to save task.",
       });
@@ -543,6 +907,7 @@ app.post(
 app.put(
   "/api/tasks/:id",
   authenticateToken,
+  upload.single("image"),
   async (req, res) => {
     try {
       const taskId = Number(
@@ -574,20 +939,67 @@ app.put(
         due_time = null,
         priority = "Medium",
         status = "Pending",
+        removeImage = "false",
       } = req.body;
 
-      const [result] = await db.execute(
-        `UPDATE tasks
-         SET
-           title = ?,
-           description = ?,
-           due_date = ?,
-           due_time = ?,
-           priority = ?,
-           status = ?
-         WHERE id = ?
-           AND user_id = ?`,
-        [
+      let query;
+      let values;
+
+      // =========================
+      // New image selected
+      // =========================
+
+      if (req.file) {
+        query = `
+          UPDATE tasks
+          SET
+            title = ?,
+            description = ?,
+            due_date = ?,
+            due_time = ?,
+            priority = ?,
+            status = ?,
+            image = ?,
+            image_type = ?
+          WHERE id = ?
+            AND user_id = ?
+        `;
+
+        values = [
+          title.trim(),
+          description,
+          due_date,
+          due_time || null,
+          priority,
+          status,
+          req.file.buffer,
+          req.file.mimetype,
+          taskId,
+          req.user.id,
+        ];
+      }
+
+      // =========================
+      // Remove existing image
+      // =========================
+
+      else if (removeImage === "true") {
+        query = `
+          UPDATE tasks
+          SET
+            title = ?,
+            description = ?,
+            due_date = ?,
+            due_time = ?,
+            priority = ?,
+            status = ?,
+            image = NULL,
+            image_type = NULL
+          WHERE id = ?
+            AND user_id = ?
+        `;
+
+        values = [
           title.trim(),
           description,
           due_date,
@@ -596,7 +1008,42 @@ app.put(
           status,
           taskId,
           req.user.id,
-        ]
+        ];
+      }
+
+      // =========================
+      // Keep existing image
+      // =========================
+
+      else {
+        query = `
+          UPDATE tasks
+          SET
+            title = ?,
+            description = ?,
+            due_date = ?,
+            due_time = ?,
+            priority = ?,
+            status = ?
+          WHERE id = ?
+            AND user_id = ?
+        `;
+
+        values = [
+          title.trim(),
+          description,
+          due_date,
+          due_time || null,
+          priority,
+          status,
+          taskId,
+          req.user.id,
+        ];
+      }
+
+      const [result] = await db.execute(
+        query,
+        values
       );
 
       if (result.affectedRows === 0) {
@@ -615,7 +1062,11 @@ app.put(
            priority,
            status,
            created_at,
-           updated_at
+           updated_at,
+           CASE
+             WHEN image IS NULL THEN 0
+             ELSE 1
+           END AS has_image
          FROM tasks
          WHERE id = ?
            AND user_id = ?`,
@@ -635,6 +1086,32 @@ app.put(
         "Update task error:",
         error
       );
+
+      if (
+        error instanceof multer.MulterError
+      ) {
+        if (
+          error.code === "LIMIT_FILE_SIZE"
+        ) {
+          return res.status(400).json({
+            message:
+              "Image must be 5 MB or smaller.",
+          });
+        }
+
+        return res.status(400).json({
+          message: error.message,
+        });
+      }
+
+      if (
+        error.message ===
+        "Only JPG, PNG and WebP images are allowed."
+      ) {
+        return res.status(400).json({
+          message: error.message,
+        });
+      }
 
       return res.status(500).json({
         message:
@@ -699,6 +1176,59 @@ app.delete(
     }
   }
 );
+
+// =========================
+// MULTER / GENERAL ERROR
+// HANDLER
+// =========================
+
+app.use((error, req, res, next) => {
+  console.error(
+    "Server error:",
+    error
+  );
+
+  if (
+    error instanceof multer.MulterError
+  ) {
+    if (
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res.status(400).json({
+        message:
+          "Image must be 5 MB or smaller.",
+      });
+    }
+
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
+
+  if (
+    error.message ===
+    "Only JPG, PNG and WebP images are allowed."
+  ) {
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
+
+  if (
+    error.message ===
+    "Not allowed by CORS"
+  ) {
+    return res.status(403).json({
+      message:
+        "CORS policy blocked this request.",
+    });
+  }
+
+  return res.status(500).json({
+    message:
+      "Something went wrong on the server.",
+  });
+});
 
 // =========================
 // START SERVER
