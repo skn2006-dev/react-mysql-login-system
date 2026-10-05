@@ -3,9 +3,8 @@ import { useState } from "react";
 import "./App.css";
 import Dashboard from "./Dashboard";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
-
+const API_URL = "https://react-mysql-login-system-backend.onrender.com"
+  
 function App() {
   // Restore login state after refreshing the browser
   const [isLoggedIn, setIsLoggedIn] = useState(
