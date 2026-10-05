@@ -1,6 +1,6 @@
 
 import { useMemo, useState } from "react";
-import "./Calender.css";
+import "./calender.css";
 
 function Calendar({ tasks, onSelectDate }) {
   const [currentDate, setCurrentDate] = useState(new Date());
