@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   GoogleOAuthProvider,
-  useGoogleLogin,
+  GoogleLogin,
 } from "@react-oauth/google";
 
 import "./App.css";
@@ -14,6 +14,10 @@ const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 function App() {
+  // =========================
+  // Login state
+  // =========================
+
   const [isLoggedIn, setIsLoggedIn] = useState(
     () => Boolean(localStorage.getItem("token"))
   );
@@ -22,12 +26,17 @@ function App() {
     () => localStorage.getItem("userName") || ""
   );
 
+  // =========================
+  // Form state
+  // =========================
+
   const [isLogin, setIsLogin] = useState(true);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
 
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -47,11 +56,12 @@ function App() {
   };
 
   // =========================
-  // Normal Login / Register
+  // Normal Login / Registration
   // =========================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     setMessage("");
 
     if (!email.trim() || !password) {
@@ -177,15 +187,15 @@ function App() {
   // =========================
 
   const handleGoogleSuccess = async (
-    googleResponse
+    credentialResponse
   ) => {
     try {
       setIsLoading(true);
       setMessage("");
 
-      if (!googleResponse?.access_token) {
+      if (!credentialResponse?.credential) {
         throw new Error(
-          "Google sign-in did not return an access token."
+          "Google sign-in did not return a credential."
         );
       }
 
@@ -197,8 +207,8 @@ function App() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            access_token:
-              googleResponse.access_token,
+            credential:
+              credentialResponse.credential,
           }),
         }
       );
@@ -218,12 +228,13 @@ function App() {
         );
       }
 
-      // Save our backend JWT
+      // Save JWT
       localStorage.setItem(
         "token",
         data.token
       );
 
+      // Get user name from backend
       const googleUserName =
         data.user?.name ||
         data.name ||
@@ -253,15 +264,10 @@ function App() {
   };
 
   const handleGoogleError = () => {
-    setMessage("Google sign-in failed.");
+    setMessage(
+      "Google sign-in failed."
+    );
   };
-
-  // Custom Google button
-  const googleLogin = useGoogleLogin({
-    onSuccess: handleGoogleSuccess,
-    onError: handleGoogleError,
-    scope: "openid profile email",
-  });
 
   // =========================
   // Forgot Password
@@ -356,7 +362,10 @@ function App() {
     <main className="auth-page">
       <section className="auth-container">
 
-        {/* Left Image */}
+        {/* =========================
+            LEFT IMAGE
+        ========================= */}
+
         <div className="auth-image-section">
           <img
             src="/react.jpg"
@@ -365,7 +374,10 @@ function App() {
           />
         </div>
 
-        {/* Right Form */}
+        {/* =========================
+            RIGHT FORM
+        ========================= */}
+
         <div className="auth-form-section">
           <div className="auth-form-content">
 
@@ -380,6 +392,10 @@ function App() {
                 ? "Sign into your account"
                 : "Sign up to get started"}
             </p>
+
+            {/* =========================
+                FORM
+            ========================= */}
 
             <form
               className="auth-form"
@@ -497,7 +513,10 @@ function App() {
                 </p>
               )}
 
-              {/* Sign In / Sign Up */}
+              {/* =========================
+                  SIGN IN / SIGN UP BUTTON
+              ========================= */}
+
               <button
                 type="submit"
                 className="auth-submit-button"
@@ -509,66 +528,70 @@ function App() {
                   ? "Sign In"
                   : "Sign Up"}
               </button>
+
             </form>
 
-            {/* Google Login */}
+            {/* =========================
+                GOOGLE LOGIN
+            ========================= */}
+
             {isLogin && (
               <>
                 <div className="google-divider">
                   <span>OR</span>
                 </div>
 
-                {GOOGLE_CLIENT_ID ? (
-                  <button
-                    type="button"
-                    className="custom-google-button"
-                    onClick={() =>
-                      googleLogin()
-                    }
-                    disabled={isLoading}
-                  >
-                    <span className="google-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
+                <div className="google-login-container">
+
+                  {GOOGLE_CLIENT_ID ? (
+                    <>
+                      {/* Visible custom button */}
+                      <button
+                        type="button"
+                        className="custom-google-button"
+                        disabled={isLoading}
                       >
-                        <path
-                          fill="#4285F4"
-                          d="M21.35 12.23c0-.79-.07-1.55-.2-2.28H12v4.31h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.42z"
-                        />
+                        <span className="google-logo">
+                          G
+                        </span>
 
-                        <path
-                          fill="#34A853"
-                          d="M12 21.5c2.63 0 4.84-.87 6.45-2.35l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.04H3.26v2.53A9.74 9.74 0 0 0 12 21.5z"
-                        />
+                        <span>
+                          Sign in with Google
+                        </span>
+                      </button>
 
-                        <path
-                          fill="#FBBC05"
-                          d="M6.51 13.58A5.86 5.86 0 0 1 6.2 12c0-.55.1-1.09.31-1.58V7.89H3.26A9.5 9.5 0 0 0 2.25 12c0 1.53.37 2.98 1.01 4.11l3.25-2.53z"
+                      {/* Real Google authentication */}
+                      <div className="google-login-overlay">
+                        <GoogleLogin
+                          onSuccess={
+                            handleGoogleSuccess
+                          }
+                          onError={
+                            handleGoogleError
+                          }
+                          useOneTap={false}
+                          theme="outline"
+                          size="large"
+                          text="signin_with"
+                          shape="rectangular"
+                          width="100%"
                         />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="auth-message">
+                      Google login is not configured.
+                    </p>
+                  )}
 
-                        <path
-                          fill="#EA4335"
-                          d="M12 6.38c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.48 14.63 2.5 12 2.5a9.74 9.74 0 0 0-8.74 5.39l3.25 2.53C7.29 8.1 9.45 6.38 12 6.38z"
-                        />
-                      </svg>
-                    </span>
-
-                    <span>
-                      Sign in with Google
-                    </span>
-                  </button>
-                ) : (
-                  <p className="auth-message">
-                    Google login is not configured.
-                  </p>
-                )}
+                </div>
               </>
             )}
 
-            {/* Switch Login / Signup */}
+            {/* =========================
+                SWITCH LOGIN / SIGNUP
+            ========================= */}
+
             <p className="auth-switch-text">
               {isLogin
                 ? "Don't have an account?"
@@ -594,7 +617,7 @@ function App() {
 }
 
 // =========================
-// Google OAuth Provider
+// GOOGLE OAUTH PROVIDER
 // =========================
 
 function AppWithGoogleProvider() {

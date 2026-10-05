@@ -1,13 +1,21 @@
-
 import { useEffect, useState } from "react";
 import Calendar from "./calender";
+
 import {
   getTasks,
   addTask,
   updateTask,
   deleteTask,
 } from "./taskapi";
+
 import "./Dashboard.css";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// =========================
+// EMPTY TASK
+// =========================
 
 const emptyTask = {
   title: "",
@@ -16,33 +24,154 @@ const emptyTask = {
   due_time: "",
   priority: "Medium",
   status: "Pending",
+  imageFile: null,
+  removeImage: false,
+  has_image: false,
 };
 
+// =========================
+// PAGES
+// =========================
+
 const pages = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "tasks", label: "Tasks" },
-  { id: "calendar", label: "Calendar" },
-  { id: "progress", label: "Progress" },
+  {
+    id: "dashboard",
+    label: "Dashboard",
+  },
+  {
+    id: "tasks",
+    label: "Tasks",
+  },
+  {
+    id: "calendar",
+    label: "Calendar",
+  },
+  {
+    id: "progress",
+    label: "Progress",
+  },
 ];
 
+// =========================
+// TASK IMAGE COMPONENT
+// =========================
+
+function TaskImage({ taskId }) {
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    let objectUrl = "";
+
+    const loadImage = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          return;
+        }
+
+        const response = await fetch(
+          `${API_URL}/api/tasks/${taskId}/image`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to load image.");
+        }
+
+        const blob = await response.blob();
+
+        objectUrl = URL.createObjectURL(blob);
+
+        setImageUrl(objectUrl);
+      } catch (error) {
+        console.error(
+          "Task image loading error:",
+          error
+        );
+
+        setImageError(true);
+      }
+    };
+
+    loadImage();
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [taskId]);
+
+  if (imageError || !imageUrl) {
+    return null;
+  }
+
+  return (
+    <div className="task-image-wrapper">
+      <img
+        src={imageUrl}
+        alt="Task"
+        className="task-image"
+      />
+    </div>
+  );
+}
+
+// =========================
+// DASHBOARD
+// =========================
+
 function Dashboard({ userName, onLogout }) {
-  const [activePage, setActivePage] = useState("dashboard");
+  const [activePage, setActivePage] =
+    useState("dashboard");
+
   const [tasks, setTasks] = useState([]);
-  const [task, setTask] = useState({ ...emptyTask });
-  const [editingId, setEditingId] = useState(null);
-  const [message, setMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+
+  const [task, setTask] = useState({
+    ...emptyTask,
+  });
+
+  const [editingId, setEditingId] =
+    useState(null);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const [searchTerm, setSearchTerm] =
+    useState("");
+
+  // =========================
+  // LOAD TASKS
+  // =========================
 
   const loadTasks = async () => {
     try {
       setIsLoading(true);
+
       const data = await getTasks();
-      setTasks(Array.isArray(data) ? data : []);
+
+      setTasks(
+        Array.isArray(data) ? data : []
+      );
+
       setMessage("");
     } catch (error) {
-      setMessage(error.message || "Unable to load tasks.");
+      setMessage(
+        error.message ||
+          "Unable to load tasks."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -52,131 +181,397 @@ function Dashboard({ userName, onLogout }) {
     loadTasks();
   }, []);
 
+  // =========================
+  // HANDLE INPUT
+  // =========================
+
   const handleChange = (event) => {
-    const { name, value } = event.target;
-    setTask((previous) => ({ ...previous, [name]: value }));
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setTask((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
 
+  // =========================
+  // HANDLE IMAGE
+  // =========================
+
+  const handleImageChange = (event) => {
+    const file =
+      event.target.files?.[0] || null;
+
+    if (!file) {
+      setTask((previous) => ({
+        ...previous,
+        imageFile: null,
+      }));
+
+      return;
+    }
+
+    // Allowed image types
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setMessage(
+        "Only JPG, PNG and WebP images are allowed."
+      );
+
+      event.target.value = "";
+
+      setTask((previous) => ({
+        ...previous,
+        imageFile: null,
+      }));
+
+      return;
+    }
+
+    // Maximum 5 MB
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setMessage(
+        "Image must be 5 MB or smaller."
+      );
+
+      event.target.value = "";
+
+      setTask((previous) => ({
+        ...previous,
+        imageFile: null,
+      }));
+
+      return;
+    }
+
+    setMessage("");
+
+    setTask((previous) => ({
+      ...previous,
+      imageFile: file,
+      removeImage: false,
+    }));
+  };
+
+  // =========================
+  // REMOVE IMAGE
+  // =========================
+
+  const handleRemoveImage = () => {
+    setTask((previous) => ({
+      ...previous,
+      imageFile: null,
+      removeImage: true,
+      has_image: false,
+    }));
+
+    setMessage("");
+  };
+
+  // =========================
+  // RESET FORM
+  // =========================
+
   const resetForm = () => {
-    setTask({ ...emptyTask });
+    setTask({
+      ...emptyTask,
+    });
+
     setEditingId(null);
   };
 
+  // =========================
+  // SUBMIT TASK
+  // =========================
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+
     setMessage("");
 
     if (!task.title.trim()) {
-      setMessage("Please enter a task title.");
+      setMessage(
+        "Please enter a task title."
+      );
+
       return;
     }
 
     if (!task.due_date) {
-      setMessage("Please select a due date.");
+      setMessage(
+        "Please select a due date."
+      );
+
       return;
     }
 
-    const wasEditing = editingId !== null;
+    // Validate image again before sending
+    if (task.imageFile) {
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+      ];
+
+      if (
+        !allowedTypes.includes(
+          task.imageFile.type
+        )
+      ) {
+        setMessage(
+          "Only JPG, PNG and WebP images are allowed."
+        );
+
+        return;
+      }
+
+      if (
+        task.imageFile.size >
+        5 * 1024 * 1024
+      ) {
+        setMessage(
+          "Image must be 5 MB or smaller."
+        );
+
+        return;
+      }
+    }
+
+    const wasEditing =
+      editingId !== null;
+
     const taskData = {
       ...task,
+
       title: task.title.trim(),
-      description: task.description.trim(),
-      due_time: task.due_time || null,
+
+      description:
+        task.description.trim(),
+
+      due_time:
+        task.due_time || null,
     };
 
     try {
       setIsSaving(true);
 
       if (wasEditing) {
-        await updateTask(editingId, taskData);
+        await updateTask(
+          editingId,
+          taskData
+        );
       } else {
         await addTask(taskData);
       }
 
       resetForm();
+
       await loadTasks();
+
       setMessage(
         wasEditing
           ? "Task updated successfully!"
           : "Task added successfully!"
       );
     } catch (error) {
-      setMessage(error.message || "Unable to save task.");
+      setMessage(
+        error.message ||
+          "Unable to save task."
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
+  // =========================
+  // EDIT TASK
+  // =========================
+
   const handleEdit = (selectedTask) => {
     setEditingId(selectedTask.id);
+
     setTask({
-      title: selectedTask.title || "",
-      description: selectedTask.description || "",
-      due_date: selectedTask.due_date
-        ? String(selectedTask.due_date).slice(0, 10)
-        : "",
-      due_time: selectedTask.due_time
-        ? String(selectedTask.due_time).slice(0, 5)
-        : "",
-      priority: selectedTask.priority || "Medium",
-      status: selectedTask.status || "Pending",
+      title:
+        selectedTask.title || "",
+
+      description:
+        selectedTask.description || "",
+
+      due_date:
+        selectedTask.due_date
+          ? String(
+              selectedTask.due_date
+            ).slice(0, 10)
+          : "",
+
+      due_time:
+        selectedTask.due_time
+          ? String(
+              selectedTask.due_time
+            ).slice(0, 5)
+          : "",
+
+      priority:
+        selectedTask.priority ||
+        "Medium",
+
+      status:
+        selectedTask.status ||
+        "Pending",
+
+      imageFile: null,
+
+      removeImage: false,
+
+      has_image:
+        Boolean(
+          selectedTask.has_image
+        ),
     });
+
     setMessage("");
+
     setActivePage("tasks");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
+  // =========================
+  // DELETE TASK
+  // =========================
+
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this task?"
+      )
+    ) {
       return;
     }
 
     try {
       await deleteTask(id);
+
       setTasks((previous) =>
-        previous.filter((item) => item.id !== id)
+        previous.filter(
+          (item) => item.id !== id
+        )
       );
 
-      if (editingId === id) resetForm();
+      if (editingId === id) {
+        resetForm();
+      }
 
-      setMessage("Task deleted successfully!");
+      setMessage(
+        "Task deleted successfully!"
+      );
     } catch (error) {
-      setMessage(error.message || "Unable to delete task.");
+      setMessage(
+        error.message ||
+          "Unable to delete task."
+      );
     }
   };
 
-  const handleStatusChange = async (selectedTask, status) => {
+  // =========================
+  // STATUS CHANGE
+  // =========================
+
+  const handleStatusChange = async (
+    selectedTask,
+    status
+  ) => {
     try {
-      await updateTask(selectedTask.id, {
-        title: selectedTask.title,
-        description: selectedTask.description || "",
-        due_date: String(selectedTask.due_date).slice(0, 10),
-        due_time: selectedTask.due_time || null,
-        priority: selectedTask.priority || "Medium",
-        status,
-      });
+      await updateTask(
+        selectedTask.id,
+        {
+          title:
+            selectedTask.title,
+
+          description:
+            selectedTask.description ||
+            "",
+
+          due_date:
+            String(
+              selectedTask.due_date
+            ).slice(0, 10),
+
+          due_time:
+            selectedTask.due_time ||
+            null,
+
+          priority:
+            selectedTask.priority ||
+            "Medium",
+
+          status,
+
+          // Important:
+          // Don't upload/change the image
+          imageFile: null,
+
+          removeImage: false,
+        }
+      );
 
       await loadTasks();
-      setMessage("Task status updated!");
+
+      setMessage(
+        "Task status updated!"
+      );
     } catch (error) {
-      setMessage(error.message || "Unable to update task status.");
+      setMessage(
+        error.message ||
+          "Unable to update task status."
+      );
     }
   };
 
+  // =========================
+  // SUMMARY
+  // =========================
+
   const total = tasks.length;
+
   const pending = tasks.filter(
-    (item) => item.status === "Pending"
+    (item) =>
+      item.status === "Pending"
   ).length;
+
   const inProgress = tasks.filter(
-    (item) => item.status === "In Progress"
+    (item) =>
+      item.status === "In Progress"
   ).length;
+
   const completed = tasks.filter(
-    (item) => item.status === "Completed"
+    (item) =>
+      item.status === "Completed"
   ).length;
 
   const completion = total
-    ? Math.round((completed / total) * 100)
+    ? Math.round(
+        (completed / total) * 100
+      )
     : 0;
+
+  // =========================
+  // PAGE TITLE
+  // =========================
 
   const pageTitle = {
     dashboard: "Dashboard",
@@ -185,47 +580,96 @@ function Dashboard({ userName, onLogout }) {
     progress: "Progress",
   }[activePage];
 
+  // =========================
+  // SUMMARY CARDS
+  // =========================
+
   const renderSummary = () => (
     <section className="summary-grid">
       <article className="summary-card total-card">
-        <span className="summary-label">Total Tasks</span>
+        <span className="summary-label">
+          Total Tasks
+        </span>
+
         <strong>{total}</strong>
-        <span className="summary-note">All your tasks</span>
+
+        <span className="summary-note">
+          All your tasks
+        </span>
       </article>
 
       <article className="summary-card pending-card">
-        <span className="summary-label">Pending</span>
+        <span className="summary-label">
+          Pending
+        </span>
+
         <strong>{pending}</strong>
-        <span className="summary-note">Waiting to start</span>
+
+        <span className="summary-note">
+          Waiting to start
+        </span>
       </article>
 
       <article className="summary-card progress-card">
-        <span className="summary-label">In Progress</span>
+        <span className="summary-label">
+          In Progress
+        </span>
+
         <strong>{inProgress}</strong>
-        <span className="summary-note">Currently working</span>
+
+        <span className="summary-note">
+          Currently working
+        </span>
       </article>
 
       <article className="summary-card completed-card">
-        <span className="summary-label">Completed</span>
+        <span className="summary-label">
+          Completed
+        </span>
+
         <strong>{completed}</strong>
-        <span className="summary-note">Tasks finished</span>
+
+        <span className="summary-note">
+          Tasks finished
+        </span>
       </article>
     </section>
   );
+
+  // =========================
+  // TASK FORM
+  // =========================
 
   const renderTaskForm = () => (
     <section className="content-card">
       <div className="section-heading">
         <div>
-          <span className="section-eyebrow">TASK ORGANIZER</span>
-          <h2>{editingId !== null ? "Edit Task" : "Add New Task"}</h2>
-          <p>Enter your task details and organize your work.</p>
+          <span className="section-eyebrow">
+            TASK ORGANIZER
+          </span>
+
+          <h2>
+            {editingId !== null
+              ? "Edit Task"
+              : "Add New Task"}
+          </h2>
+
+          <p>
+            Enter your task details and
+            organize your work.
+          </p>
         </div>
       </div>
 
-      <form className="task-form" onSubmit={handleSubmit}>
+      <form
+        className="task-form"
+        onSubmit={handleSubmit}
+      >
+        {/* TITLE */}
+
         <label>
           Task title
+
           <input
             type="text"
             name="title"
@@ -236,8 +680,11 @@ function Dashboard({ userName, onLogout }) {
           />
         </label>
 
+        {/* DESCRIPTION */}
+
         <label>
           Description
+
           <textarea
             name="description"
             placeholder="Enter task description"
@@ -247,9 +694,12 @@ function Dashboard({ userName, onLogout }) {
           />
         </label>
 
+        {/* DATE + TIME */}
+
         <div className="form-row">
           <label>
             Due date
+
             <input
               type="date"
               name="due_date"
@@ -261,6 +711,7 @@ function Dashboard({ userName, onLogout }) {
 
           <label>
             Due time
+
             <input
               type="time"
               name="due_time"
@@ -270,39 +721,146 @@ function Dashboard({ userName, onLogout }) {
           </label>
         </div>
 
+        {/* PRIORITY + STATUS */}
+
         <div className="form-row">
           <label>
             Priority
+
             <select
               name="priority"
               value={task.priority}
               onChange={handleChange}
             >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
+              <option value="Low">
+                Low
+              </option>
+
+              <option value="Medium">
+                Medium
+              </option>
+
+              <option value="High">
+                High
+              </option>
             </select>
           </label>
 
           <label>
             Status
+
             <select
               name="status"
               value={task.status}
               onChange={handleChange}
             >
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
+              <option value="Pending">
+                Pending
+              </option>
+
+              <option value="In Progress">
+                In Progress
+              </option>
+
+              <option value="Completed">
+                Completed
+              </option>
             </select>
           </label>
         </div>
 
+        {/* IMAGE */}
+
+        <label className="task-image-input">
+          Task image
+
+          <input
+            type="file"
+            name="image"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleImageChange}
+          />
+
+          <span className="image-help">
+            JPG, PNG or WebP · Maximum 5 MB
+          </span>
+        </label>
+
+        {/* SELECTED IMAGE */}
+
+        {task.imageFile && (
+          <div className="selected-image-preview">
+            <img
+              src={URL.createObjectURL(
+                task.imageFile
+              )}
+              alt="Selected task"
+            />
+
+            <div>
+              <strong>
+                {task.imageFile.name}
+              </strong>
+
+              <span>
+                {(
+                  task.imageFile.size /
+                  1024 /
+                  1024
+                ).toFixed(2)}{" "}
+                MB
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* EXISTING IMAGE */}
+
+        {editingId !== null &&
+          task.has_image &&
+          !task.removeImage &&
+          !task.imageFile && (
+            <div className="existing-image-area">
+              <span>
+                This task already has an
+                image.
+              </span>
+
+              <button
+                type="button"
+                className="remove-image-button"
+                onClick={
+                  handleRemoveImage
+                }
+              >
+                Remove Image
+              </button>
+            </div>
+          )}
+
+        {/* IMAGE REMOVED */}
+
+        {editingId !== null &&
+          task.removeImage && (
+            <div className="image-removed-message">
+              Existing image will be
+              removed when you update
+              the task.
+            </div>
+          )}
+
+        {/* MESSAGE */}
+
         {message && (
-          <p className="dashboard-message" role="status">
+          <p
+            className="dashboard-message"
+            role="status"
+          >
             {message}
           </p>
         )}
+
+        {/* BUTTONS */}
 
         <div className="form-actions">
           <button
@@ -313,8 +871,8 @@ function Dashboard({ userName, onLogout }) {
             {isSaving
               ? "Saving..."
               : editingId !== null
-                ? "Update Task"
-                : "Add Task"}
+              ? "Update Task"
+              : "Add Task"}
           </button>
 
           {editingId !== null && (
@@ -331,33 +889,55 @@ function Dashboard({ userName, onLogout }) {
     </section>
   );
 
-  const renderTaskList = (items, showHeading = true) => {
-    const filteredItems = items.filter((item) => {
-      if (activePage !== "tasks" || !searchTerm.trim()) {
-        return true;
-      }
+  // =========================
+  // TASK LIST
+  // =========================
 
-      const searchableText = [
-        item.title,
-        item.description,
-        item.status,
-        item.priority,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  const renderTaskList = (
+    items,
+    showHeading = true
+  ) => {
+    const filteredItems =
+      items.filter((item) => {
+        if (
+          activePage !== "tasks" ||
+          !searchTerm.trim()
+        ) {
+          return true;
+        }
 
-      return searchableText.includes(searchTerm.trim().toLowerCase());
-    });
+        const searchableText = [
+          item.title,
+          item.description,
+          item.status,
+          item.priority,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(
+          searchTerm
+            .trim()
+            .toLowerCase()
+        );
+      });
 
     return (
       <section className="content-card">
         {showHeading && (
           <div className="section-heading">
             <div>
-              <span className="section-eyebrow">YOUR WORK</span>
+              <span className="section-eyebrow">
+                YOUR WORK
+              </span>
+
               <h2>All Tasks</h2>
-              <p>Review, update or remove your tasks.</p>
+
+              <p>
+                Review, update or remove
+                your tasks.
+              </p>
             </div>
 
             <span className="task-count">
@@ -366,28 +946,42 @@ function Dashboard({ userName, onLogout }) {
           </div>
         )}
 
+        {/* SEARCH */}
+
         {activePage === "tasks" && (
           <div className="task-search">
             <input
               type="search"
               placeholder="Search tasks by title, description, status or priority..."
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) =>
+                setSearchTerm(
+                  event.target.value
+                )
+              }
               aria-label="Search tasks"
             />
           </div>
         )}
 
+        {/* LOADING */}
+
         {isLoading ? (
-          <p className="empty-message">Loading tasks...</p>
+          <p className="empty-message">
+            Loading tasks...
+          </p>
         ) : filteredItems.length === 0 ? (
           <div className="empty-state">
-            <span className="empty-icon">✓</span>
+            <span className="empty-icon">
+              ✓
+            </span>
+
             <h3>
               {searchTerm.trim()
                 ? "No matching tasks found"
                 : "No tasks found"}
             </h3>
+
             <p>
               {searchTerm.trim()
                 ? "Try another search term."
@@ -399,7 +993,10 @@ function Dashboard({ userName, onLogout }) {
                 type="button"
                 className="primary-button"
                 onClick={() => {
-                  setActivePage("tasks");
+                  setActivePage(
+                    "tasks"
+                  );
+
                   resetForm();
                 }}
               >
@@ -409,88 +1006,170 @@ function Dashboard({ userName, onLogout }) {
           </div>
         ) : (
           <div className="task-list">
-            {filteredItems.map((item) => {
-              const priority = (
-                item.priority || "Medium"
-              ).toLowerCase();
+            {filteredItems.map(
+              (item) => {
+                const priority = (
+                  item.priority ||
+                  "Medium"
+                ).toLowerCase();
 
-              const status = (item.status || "Pending")
-                .toLowerCase()
-                .replace(/\s+/g, "-");
+                const status = (
+                  item.status ||
+                  "Pending"
+                )
+                  .toLowerCase()
+                  .replace(
+                    /\s+/g,
+                    "-"
+                  );
 
-              return (
-                <article className="task-card" key={item.id}>
-                  <div className="task-card-main">
-                    <div className="task-title-row">
-                      <h3>{item.title}</h3>
-                      <span
-                        className={`priority-badge priority-${priority}`}
-                      >
-                        {item.priority || "Medium"}
-                      </span>
-                    </div>
+                return (
+                  <article
+                    className="task-card"
+                    key={item.id}
+                  >
+                    {/* IMAGE */}
 
-                    {item.description && (
-                      <p className="task-description">
-                        {item.description}
-                      </p>
-                    )}
+                    {item.has_image ? (
+                      <TaskImage
+                        taskId={item.id}
+                      />
+                    ) : null}
 
-                    <div className="task-meta">
-                      <span>
-                        <strong>Due:</strong>{" "}
-                        {String(item.due_date || "").slice(0, 10)}
-                      </span>
+                    <div className="task-card-main">
+                      {/* TITLE */}
 
-                      {item.due_time && (
-                        <span>
-                          <strong>Time:</strong>{" "}
-                          {String(item.due_time).slice(0, 5)}
+                      <div className="task-title-row">
+                        <h3>
+                          {item.title}
+                        </h3>
+
+                        <span
+                          className={`priority-badge priority-${priority}`}
+                        >
+                          {item.priority ||
+                            "Medium"}
                         </span>
+                      </div>
+
+                      {/* DESCRIPTION */}
+
+                      {item.description && (
+                        <p className="task-description">
+                          {
+                            item.description
+                          }
+                        </p>
                       )}
+
+                      {/* DATE */}
+
+                      <div className="task-meta">
+                        <span>
+                          <strong>
+                            Due:
+                          </strong>{" "}
+                          {String(
+                            item.due_date ||
+                              ""
+                          ).slice(
+                            0,
+                            10
+                          )}
+                        </span>
+
+                        {item.due_time && (
+                          <span>
+                            <strong>
+                              Time:
+                            </strong>{" "}
+                            {String(
+                              item.due_time
+                            ).slice(
+                              0,
+                              5
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* STATUS */}
+
+                      <label className="status-control">
+                        Status
+
+                        <select
+                          className={`status-select status-${status}`}
+                          value={
+                            item.status ||
+                            "Pending"
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            handleStatusChange(
+                              item,
+                              event
+                                .target
+                                .value
+                            )
+                          }
+                        >
+                          <option value="Pending">
+                            Pending
+                          </option>
+
+                          <option value="In Progress">
+                            In Progress
+                          </option>
+
+                          <option value="Completed">
+                            Completed
+                          </option>
+                        </select>
+                      </label>
                     </div>
 
-                    <label className="status-control">
-                      Status
-                      <select
-                        className={`status-select status-${status}`}
-                        value={item.status || "Pending"}
-                        onChange={(event) =>
-                          handleStatusChange(item, event.target.value)
+                    {/* ACTIONS */}
+
+                    <div className="task-actions">
+                      <button
+                        type="button"
+                        className="edit-button"
+                        onClick={() =>
+                          handleEdit(
+                            item
+                          )
                         }
                       >
-                        <option value="Pending">Pending</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Completed">Completed</option>
-                      </select>
-                    </label>
-                  </div>
+                        Edit
+                      </button>
 
-                  <div className="task-actions">
-                    <button
-                      type="button"
-                      className="edit-button"
-                      onClick={() => handleEdit(item)}
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      className="delete-button"
-                      onClick={() => handleDelete(item.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
+                      <button
+                        type="button"
+                        className="delete-button"
+                        onClick={() =>
+                          handleDelete(
+                            item.id
+                          )
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                );
+              }
+            )}
           </div>
         )}
       </section>
     );
   };
+
+  // =========================
+  // DASHBOARD PAGE
+  // =========================
 
   const renderDashboardPage = () => (
     <>
@@ -499,9 +1178,19 @@ function Dashboard({ userName, onLogout }) {
       <section className="content-card overview-card">
         <div className="section-heading">
           <div>
-            <span className="section-eyebrow">OVERVIEW</span>
-            <h2>Welcome back, {userName || "User"}!</h2>
-            <p>Here's a quick look at your task activity.</p>
+            <span className="section-eyebrow">
+              OVERVIEW
+            </span>
+
+            <h2>
+              Welcome back,{" "}
+              {userName || "User"}!
+            </h2>
+
+            <p>
+              Here's a quick look at
+              your task activity.
+            </p>
           </div>
 
           <button
@@ -509,7 +1198,10 @@ function Dashboard({ userName, onLogout }) {
             className="primary-button"
             onClick={() => {
               resetForm();
-              setActivePage("tasks");
+
+              setActivePage(
+                "tasks"
+              );
             }}
           >
             + Add Task
@@ -518,26 +1210,38 @@ function Dashboard({ userName, onLogout }) {
 
         <div className="overview-progress">
           <div className="progress-label">
-            <span>Overall completion</span>
-            <strong>{completion}%</strong>
+            <span>
+              Overall completion
+            </span>
+
+            <strong>
+              {completion}%
+            </strong>
           </div>
 
           <div className="progress-track">
             <div
               className="progress-fill"
-              style={{ width: `${completion}%` }}
+              style={{
+                width: `${completion}%`,
+              }}
             />
           </div>
         </div>
       </section>
 
-      {renderTaskList(tasks.slice(0, 3), true)}
+      {renderTaskList(
+        tasks.slice(0, 3),
+        true
+      )}
 
       {tasks.length > 3 && (
         <button
           type="button"
           className="text-button"
-          onClick={() => setActivePage("tasks")}
+          onClick={() =>
+            setActivePage("tasks")
+          }
         >
           View all tasks →
         </button>
@@ -545,20 +1249,36 @@ function Dashboard({ userName, onLogout }) {
     </>
   );
 
+  // =========================
+  // TASKS PAGE
+  // =========================
+
   const renderTasksPage = () => (
     <>
       {renderTaskForm()}
+
       {renderTaskList(tasks)}
     </>
   );
+
+  // =========================
+  // CALENDAR PAGE
+  // =========================
 
   const renderCalendarPage = () => (
     <section className="content-card calendar-page-card">
       <div className="section-heading">
         <div>
-          <span className="section-eyebrow">PLAN YOUR SCHEDULE</span>
+          <span className="section-eyebrow">
+            PLAN YOUR SCHEDULE
+          </span>
+
           <h2>Task Calendar</h2>
-          <p>View your calendar and keep track of your schedule.</p>
+
+          <p>
+            View your calendar and keep
+            track of your schedule.
+          </p>
         </div>
       </div>
 
@@ -568,6 +1288,10 @@ function Dashboard({ userName, onLogout }) {
     </section>
   );
 
+  // =========================
+  // PROGRESS PAGE
+  // =========================
+
   const renderProgressPage = () => (
     <>
       {renderSummary()}
@@ -575,77 +1299,134 @@ function Dashboard({ userName, onLogout }) {
       <section className="content-card progress-page-card">
         <div className="section-heading">
           <div>
-            <span className="section-eyebrow">YOUR PERFORMANCE</span>
+            <span className="section-eyebrow">
+              YOUR PERFORMANCE
+            </span>
+
             <h2>Task Progress</h2>
-            <p>Track how your tasks are progressing.</p>
+
+            <p>
+              Track how your tasks are
+              progressing.
+            </p>
           </div>
         </div>
 
         <div className="overall-progress">
           <div className="overall-progress-top">
-            <span>Overall completion</span>
-            <strong>{completion}%</strong>
+            <span>
+              Overall completion
+            </span>
+
+            <strong>
+              {completion}%
+            </strong>
           </div>
 
           <div className="progress-track large-track">
             <div
               className="progress-fill"
-              style={{ width: `${completion}%` }}
+              style={{
+                width: `${completion}%`,
+              }}
             />
           </div>
 
           <p>
-            {completed} of {total} tasks completed
+            {completed} of {total} tasks
+            completed
           </p>
         </div>
 
         <div className="progress-breakdown">
+          {/* PENDING */}
+
           <div className="breakdown-row">
             <div className="breakdown-title">
               <span className="legend-dot dot-pending" />
-              <span>Pending</span>
-              <strong>{pending}</strong>
+
+              <span>
+                Pending
+              </span>
+
+              <strong>
+                {pending}
+              </strong>
             </div>
 
             <div className="progress-track">
               <div
                 className="progress-fill fill-pending"
                 style={{
-                  width: `${total ? (pending / total) * 100 : 0}%`,
+                  width: `${
+                    total
+                      ? (pending /
+                          total) *
+                        100
+                      : 0
+                  }%`,
                 }}
               />
             </div>
           </div>
 
+          {/* IN PROGRESS */}
+
           <div className="breakdown-row">
             <div className="breakdown-title">
               <span className="legend-dot dot-progress" />
-              <span>In Progress</span>
-              <strong>{inProgress}</strong>
+
+              <span>
+                In Progress
+              </span>
+
+              <strong>
+                {inProgress}
+              </strong>
             </div>
 
             <div className="progress-track">
               <div
                 className="progress-fill fill-progress"
                 style={{
-                  width: `${total ? (inProgress / total) * 100 : 0}%`,
+                  width: `${
+                    total
+                      ? (inProgress /
+                          total) *
+                        100
+                      : 0
+                  }%`,
                 }}
               />
             </div>
           </div>
 
+          {/* COMPLETED */}
+
           <div className="breakdown-row">
             <div className="breakdown-title">
               <span className="legend-dot dot-completed" />
-              <span>Completed</span>
-              <strong>{completed}</strong>
+
+              <span>
+                Completed
+              </span>
+
+              <strong>
+                {completed}
+              </strong>
             </div>
 
             <div className="progress-track">
               <div
                 className="progress-fill fill-completed"
                 style={{
-                  width: `${total ? (completed / total) * 100 : 0}%`,
+                  width: `${
+                    total
+                      ? (completed /
+                          total) *
+                        100
+                      : 0
+                  }%`,
                 }}
               />
             </div>
@@ -655,16 +1436,34 @@ function Dashboard({ userName, onLogout }) {
     </>
   );
 
+  // =========================
+  // MAIN UI
+  // =========================
+
   return (
     <main className="dashboard-page">
       <div className="dashboard-container">
+        {/* HEADER */}
+
         <header className="dashboard-header">
           <div className="brand-area">
-            <div className="brand-mark">T</div>
+            <div className="brand-mark">
+              T
+            </div>
+
             <div>
-              <span className="brand-caption">TASK MANAGER</span>
-              <h1>{pageTitle}</h1>
-              <p>Hello, {userName || "User"}!</p>
+              <span className="brand-caption">
+                TASK MANAGER
+              </span>
+
+              <h1>
+                {pageTitle}
+              </h1>
+
+              <p>
+                Hello,{" "}
+                {userName || "User"}!
+              </p>
             </div>
           </div>
 
@@ -677,6 +1476,8 @@ function Dashboard({ userName, onLogout }) {
           </button>
         </header>
 
+        {/* NAVIGATION */}
+
         <nav
           className="dashboard-navigation"
           aria-label="Main navigation"
@@ -686,13 +1487,20 @@ function Dashboard({ userName, onLogout }) {
               key={page.id}
               type="button"
               className={`navigation-button ${
-                activePage === page.id ? "active" : ""
+                activePage === page.id
+                  ? "active"
+                  : ""
               }`}
               aria-current={
-                activePage === page.id ? "page" : undefined
+                activePage === page.id
+                  ? "page"
+                  : undefined
               }
               onClick={() => {
-                setActivePage(page.id);
+                setActivePage(
+                  page.id
+                );
+
                 setMessage("");
               }}
             >
@@ -701,11 +1509,23 @@ function Dashboard({ userName, onLogout }) {
           ))}
         </nav>
 
+        {/* PAGE CONTENT */}
+
         <div className="page-content">
-          {activePage === "dashboard" && renderDashboardPage()}
-          {activePage === "tasks" && renderTasksPage()}
-          {activePage === "calendar" && renderCalendarPage()}
-          {activePage === "progress" && renderProgressPage()}
+          {activePage ===
+            "dashboard" &&
+            renderDashboardPage()}
+
+          {activePage === "tasks" &&
+            renderTasksPage()}
+
+          {activePage ===
+            "calendar" &&
+            renderCalendarPage()}
+
+          {activePage ===
+            "progress" &&
+            renderProgressPage()}
         </div>
       </div>
     </main>
